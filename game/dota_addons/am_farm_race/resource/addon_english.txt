@@ -1,0 +1,14 @@
+"lang"
+{
+    "Language" "English"
+    "Tokens"
+    {
+        "addon_game_name" "Anti-Mage Farm Race"
+        "farm_race_results" "Farm Race Results"
+        "farm_race_live" "Standings"
+        "farm_race_winner" "Winner"
+        "farm_race_creeps" "Creeps"
+        "farm_race_place" "Place"
+        "farm_race_player" "Player"
+    }
+}

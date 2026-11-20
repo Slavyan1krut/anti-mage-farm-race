@@ -1,0 +1,14 @@
+"lang"
+{
+    "Language" "Russian"
+    "Tokens"
+    {
+        "addon_game_name" "Anti-Mage Farm Race"
+        "farm_race_results" "Итоги гонки"
+        "farm_race_live" "Текущий счёт"
+        "farm_race_winner" "Победитель"
+        "farm_race_creeps" "Крипы"
+        "farm_race_place" "Место"
+        "farm_race_player" "Участник"
+    }
+}

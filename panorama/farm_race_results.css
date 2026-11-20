@@ -1,0 +1,86 @@
+#FarmResults {
+    width: 100%;
+    height: 100%;
+    visibility: collapse;
+    background-color: #090612c5;
+    z-index: 80;
+}
+#FarmResults.ResultsVisible { visibility: visible; }
+
+#LiveLeaderboard {
+    width: 226px;
+    margin-top: 124px;
+    margin-left: 12px;
+    padding: 8px 10px;
+    flow-children: down;
+    visibility: collapse;
+    background-color: #171221e8;
+    border: 1px solid #544463;
+    border-left: 2px solid #ad7adb;
+}
+#LiveLeaderboard.LiveVisible { visibility: visible; }
+#LiveColumns, .LiveRow { width: 100%; flow-children: right; }
+#LiveColumns { height: 22px; margin-bottom: 3px; }
+#LiveColumns Label { color: #c6b5d4; font-size: 14px; }
+#LiveRows { width: 100%; flow-children: down; }
+.LiveRow { height: 22px; padding: 0px 2px; }
+.LiveRow Label { color: #e9e0f0; font-size: 15px; }
+.LiveRow.WinningRow Label { color: #f4cb7a; }
+.LiveRow.IsLocalPlayer { background-color: #c191ff24; }
+.LivePlace { width: 24px; vertical-align: center; }
+.LiveScore { width: 52px; text-align: right; vertical-align: center; }
+
+#ResultsCard {
+    width: 620px;
+    horizontal-align: center;
+    vertical-align: center;
+    flow-children: down;
+    padding: 28px 32px 30px;
+    background-color: gradient(linear, 0% 0%, 100% 100%, from(#292038), to(#110e1a));
+    border: 1px solid #5b456c;
+    border-top: 3px solid #ad7adb;
+    box-shadow: #08050f 0px 10px 35px 2px;
+}
+#ResultsTitle {
+    color: #f3eafa;
+    font-size: 35px;
+    font-weight: bold;
+    margin-bottom: 18px;
+}
+#WinnerCard {
+    flow-children: right;
+    width: 100%;
+    height: 102px;
+    background-color: gradient(linear, 0% 0%, 100% 0%, from(#493053), to(#221929));
+    border: 1px solid #916e47;
+    border-left: 3px solid #f4cb7a;
+}
+#WinnerPortrait { width: 72px; height: 100%; }
+#WinnerDetails {
+    width: fill-parent-flow(1);
+    vertical-align: center;
+    margin-left: 18px;
+    flow-children: down;
+}
+#WinnerTitle { color: #f4cb7a; font-size: 15px; text-transform: uppercase; letter-spacing: 2px; }
+#WinnerName { max-width: 100%; text-overflow: ellipsis; color: #fff5e0; font-size: 30px; font-weight: bold; }
+#WinnerTotal { width: 105px; vertical-align: center; flow-children: down; }
+#WinnerScore { horizontal-align: center; color: #f4cb7a; font-size: 42px; font-weight: bold; }
+#WinnerUnit { horizontal-align: center; color: #cbb6a5; font-size: 15px; }
+
+#ResultsColumns, .ResultRow {
+    width: 100%;
+    flow-children: right;
+    padding: 0px 12px;
+}
+#ResultsColumns { height: 32px; margin-top: 16px; }
+#ResultsColumns Label { color: #b5a3c4; font-size: 15px; }
+#ResultsRows { width: 100%; flow-children: down; }
+.ResultRow { height: 40px; background-color: #ffffff06; margin-bottom: 3px; }
+.ResultRow.WinningRow { background-color: #eab96d19; }
+.ResultRow Label { font-size: 21px; color: #ede5f4; }
+.ResultRow.WinningRow Label { color: #f4cb7a; }
+.Place, .Player, .Score { vertical-align: center; }
+.Place { width: 72px; }
+.Player { width: fill-parent-flow(1); text-overflow: ellipsis; }
+.Score { width: 90px; text-align: right; }

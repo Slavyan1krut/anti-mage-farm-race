@@ -1,0 +1,39 @@
+<root>
+    <styles>
+        <include src="file://{resources}/styles/custom_game/farm_race_results.css" />
+    </styles>
+    <scripts>
+        <include src="file://{resources}/scripts/custom_game/farm_race_results.js" />
+    </scripts>
+    <Panel id="FarmRaceHud" hittest="false" hittestchildren="false">
+        <Panel id="LiveLeaderboard" visible="false" hittest="false">
+            <Panel id="LiveColumns">
+                <Label class="Player" text="#farm_race_live" />
+                <Label class="LiveScore" text="#farm_race_creeps" />
+            </Panel>
+            <Panel id="LiveRows" />
+        </Panel>
+        <Panel id="FarmResults" visible="false" hittest="false">
+            <Panel id="ResultsCard" hittest="false">
+                <Label id="ResultsTitle" text="#farm_race_results" />
+                <Panel id="WinnerCard">
+                    <DOTAHeroImage id="WinnerPortrait" heroname="npc_dota_hero_antimage" heroimagestyle="portrait" />
+                    <Panel id="WinnerDetails">
+                        <Label id="WinnerTitle" text="#farm_race_winner" />
+                        <Label id="WinnerName" />
+                    </Panel>
+                    <Panel id="WinnerTotal">
+                        <Label id="WinnerScore" />
+                        <Label id="WinnerUnit" text="#farm_race_creeps" />
+                    </Panel>
+                </Panel>
+                <Panel id="ResultsColumns">
+                    <Label class="Place" text="#farm_race_place" />
+                    <Label class="Player" text="#farm_race_player" />
+                    <Label class="Score" text="#farm_race_creeps" />
+                </Panel>
+                <Panel id="ResultsRows" />
+            </Panel>
+        </Panel>
+    </Panel>
+</root>
