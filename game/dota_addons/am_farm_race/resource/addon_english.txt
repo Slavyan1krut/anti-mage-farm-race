@@ -4,10 +4,15 @@
     "Tokens"
     {
         "addon_game_name" "Anti-Mage Farm Race"
-        "farm_race_results" "Farm Race Results"
+        "farm_race_results" "Victory"
+        "farm_race_victory_prefix" "Victory for"
         "farm_race_live" "Standings"
         "farm_race_winner" "Winner"
-        "farm_race_creeps" "Creeps"
+        "farm_race_points" "Points"
+        "farm_race_lane" "Lane"
+        "farm_race_forest" "Jungle"
+        "farm_race_gold" "Gold camp"
+        "farm_race_total" "Total"
         "farm_race_place" "Place"
         "farm_race_player" "Player"
     }

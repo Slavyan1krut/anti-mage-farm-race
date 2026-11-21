@@ -20,13 +20,26 @@ function RenderRows(container, results, live) {
             row.AddClass(live ? "LiveRow" : "ResultRow");
             $.CreatePanel("Label", row, "").AddClass(live ? "LivePlace" : "Place");
             $.CreatePanel("Label", row, "").AddClass("Player");
+            if (!live) {
+                for (var category = 0; category < 3; category++) {
+                    $.CreatePanel("Label", row, "").AddClass("FarmPoints");
+                }
+            }
             $.CreatePanel("Label", row, "").AddClass(live ? "LiveScore" : "Score");
         }
         row.SetHasClass("WinningRow", place === 1 && (!live || result.score > 0));
         row.SetHasClass("IsLocalPlayer", live && result.playerId === Game.GetLocalPlayerID());
         row.GetChild(0).text = String(place);
         row.GetChild(1).text = ResultName(result);
-        row.GetChild(2).text = String(result.score);
+        if (live) {
+            row.GetChild(2).text = String(result.score);
+        } else {
+            var farm = result.farm || {};
+            row.GetChild(2).text = String(farm.lane || 0);
+            row.GetChild(3).text = String(farm.forest || 0);
+            row.GetChild(4).text = String(farm.gold || 0);
+            row.GetChild(5).text = String(result.score);
+        }
     }
 }
 
@@ -43,7 +56,9 @@ function ShowStandings(standings) {
     livePanel.RemoveClass("LiveVisible");
 
     var winner = standings.rows[1];
-    $("#WinnerName").text = ResultName(winner);
+    var name = ResultName(winner);
+    $("#ResultsTitle").text = $.Localize("#farm_race_victory_prefix") + " " + name;
+    $("#WinnerName").text = name;
     $("#WinnerScore").text = String(winner.score);
     RenderRows(finalRows, standings.rows, false);
     finalPanel.style.width = (Game.GetScreenWidth() / (finalPanel.actualuiscale_x || 1)) + "px";

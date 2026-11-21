@@ -3,6 +3,10 @@ local LaneWaves = require("lane_waves")
 local heroName = "npc_dota_hero_antimage"
 local startingItems = {"item_bfury", "item_power_treads"}
 local raceAbilities = {"antimage_mana_break", "antimage_blink"}
+local runeModels = {
+    "rune_arcane", "rune_doubledamage01", "rune_goldxp", "rune_haste01", "rune_illusion01",
+    "rune_invisibility01", "rune_point001", "rune_regeneration01", "rune_shield01", "rune_water", "rune_xp",
+}
 local disabledAbilities = {"antimage_counterspell_ally", "antimage_counterspell", "antimage_mana_overload", "antimage_mana_void", "antimage_persecutor"}
 -- Radiant and Dire are reserved for the map so every racer can attack both waves.
 local teams = {
@@ -17,6 +21,12 @@ local packs = {
     {"npc_dota_neutral_forest_troll_berserker", "npc_dota_neutral_forest_troll_berserker", "npc_dota_neutral_forest_troll_high_priest", "npc_dota_neutral_kobold"},
     {"npc_dota_neutral_satyr_trickster", "npc_dota_neutral_satyr_trickster", "npc_dota_neutral_satyr_soulstealer", "npc_dota_neutral_kobold"},
 }
+local goldPack = {"npc_dota_neutral_kobold", "npc_dota_neutral_kobold", "npc_dota_neutral_kobold", "npc_dota_neutral_kobold"}
+local goldLocations = {
+    {x = -1720, y = 1110, name = "верхняя часть реки"},
+    {x = 1450, y = -1260, name = "нижняя часть реки"},
+}
+local botPreferences = {"lane", "gold", "forest", "balanced", "forest"}
 local fallbackCamps = {
     {-4650, -480}, {-3250, -780}, {-1450, -1600}, {280, -2750}, {1080, -4400},
     {2520, -3070}, {4150, -2070}, {5500, -1130}, {4500, 1210}, {2840, 1110},
@@ -28,6 +38,9 @@ local Race = {}
 function Precache(context)
     PrecacheUnitByNameSync(heroName, context)
     for _, item in ipairs(startingItems) do PrecacheItemByNameSync(item, context) end
+    for _, model in ipairs(runeModels) do
+        PrecacheResource("model", "models/props_gameplay/" .. model .. ".vmdl", context)
+    end
     LaneWaves.Precache(context)
     local cached = {}
     for _, pack in ipairs(packs) do
@@ -51,8 +64,9 @@ function Race:Init()
     self.creeps = {}
     self.camps = {}
     self.laneWaves = {}
+    self.goldCamps = {}
     for index, team in ipairs(teams) do
-        self.slots[index] = {index = index, team = team, score = 0, reached = 0}
+        self.slots[index] = {index = index, team = team, score = 0, reached = 0, farm = {lane = 0, forest = 0, gold = 0}}
         GameRules:SetCustomGameTeamMaxPlayers(team, 1)
         SetTeamCustomHealthbarColor(team, unpack(colors[index]))
     end
@@ -148,21 +162,84 @@ function Race:FindCamps()
     print(string.format("[Farm Race] %d camps from %d anchors", #self.camps, #anchors))
 end
 
-function Race:SpawnCamp(camp, index)
-    local pack = packs[(index - 1) % #packs + 1]
+function Race:SpawnCamp(camp, pack)
     camp.units = {}
     for offset, name in ipairs(pack) do
         local angle = offset * math.pi / 2
         local point = WalkableNear(camp.point + Vector(math.cos(angle) * 66, math.sin(angle) * 66, 0)) or camp.point
         local creep = CreateUnitByName(name, point, true, nil, nil, DOTA_TEAM_NEUTRALS)
         if creep then
+            if camp.gold then creep:SetCustomHealthLabel("+2", 255, 211, 99) end
             local id = creep:entindex()
             camp.units[id] = creep
             self.creeps[id] = camp
             camp.alive = camp.alive + 1
         end
     end
-    camp.nextSpawn = GameRules:GetGameTime() + config.campRespawn
+    if not camp.gold then camp.nextSpawn = GameRules:GetGameTime() + config.campRespawn end
+end
+
+function Race:SetupGoldCamps(now)
+    local center = WalkableNear(Vector(0, 0, 0))
+    for index, time in ipairs(config.goldCampTimes) do
+        local location = goldLocations[index]
+        if location and time < config.duration then
+            local anchor = Vector(location.x, location.y, 0)
+            local point
+            for radius = 0, 960, 160 do
+                for direction = 0, 7 do
+                    local angle = direction * math.pi / 4
+                    local candidate = WalkableNear(anchor + Vector(math.cos(angle) * radius, math.sin(angle) * radius, 0))
+                    if candidate then
+                        local clear = true
+                        for _, camp in ipairs(self.camps) do
+                            if FlatDistance(candidate, camp.point) < 380 then clear = false break end
+                        end
+                        if clear and (not center or GridNav:CanFindPath(center, candidate)) then point = candidate break end
+                    end
+                end
+                if point then break end
+            end
+            if point then
+                local spawnAt = now + time
+                self.goldCamps[#self.goldCamps + 1] = {
+                    point = point, name = location.name, gold = true, alive = 0,
+                    spawnAt = spawnAt, warnAt = math.max(now, spawnAt - config.goldCampWarning),
+                }
+            else
+                print("[Farm Race] Could not place gold camp: " .. location.name)
+            end
+        end
+    end
+end
+
+function Race:MarkGoldCamp(camp, duration)
+    for _, slot in ipairs(self.slots) do
+        if slot.hero then
+            MinimapEvent(slot.team, slot.hero, camp.point.x, camp.point.y, DOTA_MINIMAP_EVENT_HINT_LOCATION, duration)
+        end
+    end
+end
+
+function Race:UpdateGoldCamps(now)
+    for _, camp in ipairs(self.goldCamps) do
+        if camp.warnAt and now >= camp.warnAt then
+            camp.warnAt = nil
+            local remaining = math.max(1, math.ceil(camp.spawnAt - now))
+            local message = string.format("Золотой лагерь через %d сек. · %s", remaining, camp.name)
+            Announce(message, 4)
+            Tell(message)
+            self:MarkGoldCamp(camp, remaining)
+        end
+        if camp.spawnAt and now >= camp.spawnAt then
+            camp.spawnAt = nil
+            self:SpawnCamp(camp, goldPack)
+            self:MarkGoldCamp(camp, 6)
+            local message = "Золотой лагерь открыт · " .. camp.name
+            Announce(message, 4)
+            Tell(message)
+        end
+    end
 end
 
 function Race:OnStateChange()
@@ -194,6 +271,7 @@ function Race:AssignParticipants()
 end
 
 function Race:Start()
+    self:SetupGoldCamps(GameRules:GetGameTime())
     local occupied = {}
     for id = 0, DOTA_MAX_TEAM_PLAYERS - 1 do
         if PlayerResource:IsValidPlayerID(id) then
@@ -204,6 +282,7 @@ function Race:Start()
 
     local previousSpawns = {}
     local center = Vector(0, 0, 0)
+    local botCount = 0
     for _, slot in ipairs(self.slots) do
         local spawn = center
         local bestDistance = -math.huge
@@ -222,6 +301,8 @@ function Race:Start()
         slot.hero = occupied[slot.team]
         slot.bot = slot.hero == nil
         if slot.bot then
+            botCount = botCount + 1
+            slot.preference = botPreferences[botCount]
             slot.hero = CreateUnitByName(heroName, slot.spawn, true, nil, nil, slot.team)
         else
             FindClearSpaceForUnit(slot.hero, slot.spawn, true)
@@ -234,7 +315,7 @@ function Race:Start()
         end
     end
 
-    for index, camp in ipairs(self.camps) do self:SpawnCamp(camp, index) end
+    for index, camp in ipairs(self.camps) do self:SpawnCamp(camp, packs[(index - 1) % #packs + 1]) end
     local now = GameRules:GetGameTime()
     self.endsAt = now + config.duration
     self.nextLaneWaveAt = now + config.laneWaveInterval
@@ -244,7 +325,7 @@ function Race:Start()
     self:PublishStandings(self:Standings())
     local duration = string.format("%d:%02d", math.floor(config.duration / 60), config.duration % 60)
     Announce("Гонка началась! " .. duration, 3)
-    Tell("Фармите крипов в лесу и на линиях. Каждый добитый крип — 1 очко. Счёт и таймер: -score")
+    Tell("Крипы на линии и в лесу — 1 очко, золотые — 2. Счёт и таймер: -score")
 end
 
 function Race:PrepareHero(slot)
@@ -310,10 +391,13 @@ function Race:OnKilled(event)
         self.creeps[event.entindex_killed] = nil
         group.units[event.entindex_killed] = nil
         group.alive = group.alive - 1
-        if group.alive == 0 and group.point then group.nextSpawn = now + config.campRespawn end
+        if group.alive == 0 and group.point and not group.gold then group.nextSpawn = now + config.campRespawn end
         local slot = self.heroSlots[event.entindex_attacker]
         if slot and self.endsAt and now < self.endsAt and not self.finished then
-            slot.score = slot.score + 1
+            local kind = group.gold and "gold" or (group.point and "forest" or "lane")
+            local points = group.gold and 2 or 1
+            slot.farm[kind] = slot.farm[kind] + points
+            slot.score = slot.score + points
             slot.reached = now
             self.standingsChanged = true
         end
@@ -332,7 +416,40 @@ local function FarmPosition(group)
     end
 end
 
+local function TryBotBlink(slot, origin, point, now)
+    local hero = slot.hero
+    local direction = point - origin
+    local distance = direction:Length2D()
+    if distance < 700 then return false end
+    local blink = hero:FindAbilityByName("antimage_blink")
+    if not blink or not blink:IsFullyCastable() or hero:IsRooted() or hero:IsSilenced() then return false end
+    local range = blink:GetSpecialValueFor("AbilityCastRange")
+    if range <= 0 then range = 1000 end
+
+    local approach = WalkableNear(point) or point
+    local walkDistance = GridNav:FindPathLength(origin, approach)
+    for _, fraction in ipairs({1, 0.75, 0.5}) do
+        local step = math.min(range - 30, distance - 130) * fraction
+        local landing = WalkableNear(origin + direction * (step / distance))
+        if landing and FlatDistance(origin, landing) <= range - 15 then
+            local remaining = GridNav:FindPathLength(landing, approach)
+            local savesTime = remaining >= 0 and (walkDistance <= 0 or walkDistance - remaining > 350)
+            if savesTime then
+                ExecuteOrderFromTable({
+                    UnitIndex = hero:entindex(), OrderType = DOTA_UNIT_ORDER_CAST_POSITION,
+                    AbilityIndex = blink:entindex(), Position = landing, Queue = false,
+                })
+                slot.blinkUntil = now + 0.9
+                slot.repeatOrderAt = slot.blinkUntil
+                return true
+            end
+        end
+    end
+    return false
+end
+
 function Race:DriveBot(slot, now)
+    if now < (slot.blinkUntil or 0) then return end
     local hero = slot.hero
     local origin = hero:GetAbsOrigin()
     local camp = slot.targetCamp
@@ -345,16 +462,25 @@ function Race:DriveBot(slot, now)
         end
         slot.checkProgressAt = nil
     end
-    if not camp or camp.alive == 0 then
+    local seekGold = false
+    if slot.preference == "gold" and (not camp or not camp.gold) then
+        for _, gold in ipairs(self.goldCamps) do
+            if gold.alive > 0 and (gold ~= slot.skippedCamp or now >= slot.skipUntil) then seekGold = true break end
+        end
+    end
+    if not camp or camp.alive == 0 or seekGold then
         local bestDistance = math.huge
         camp = nil
-        for _, groups in ipairs({self.camps, self.laneWaves}) do
+        for kind, groups in pairs({forest = self.camps, lane = self.laneWaves, gold = self.goldCamps}) do
             for _, candidate in ipairs(groups) do
                 if candidate.alive > 0 and (candidate ~= slot.skippedCamp or now >= slot.skipUntil) then
                     local point = FarmPosition(candidate)
                     if point then
                         local distance = GridNav:FindPathLength(origin, point)
                         if distance <= 0 then distance = 15000 + FlatDistance(origin, point) end
+                        if kind == slot.preference then distance = distance * 0.65 end
+                        if kind == "gold" then distance = distance * 0.8 end
+                        if seekGold and kind ~= "gold" then distance = distance + 20000 end
                         if distance < bestDistance then
                             bestDistance = distance
                             camp = candidate
@@ -363,6 +489,7 @@ function Race:DriveBot(slot, now)
                 end
             end
         end
+        if slot.targetCamp ~= camp then slot.checkProgressAt = nil end
         slot.targetCamp = camp
     end
 
@@ -401,6 +528,7 @@ function Race:DriveBot(slot, now)
     else
         local point = FarmPosition(camp)
         if not point then return end
+        if TryBotBlink(slot, origin, point, now) then return end
         ExecuteOrderFromTable({
             UnitIndex = hero:entindex(), OrderType = DOTA_UNIT_ORDER_MOVE_TO_POSITION,
             Position = point, Queue = false,
@@ -438,7 +566,7 @@ end
 function Race:PublishStandings(ranked)
     local rows = {}
     for place, slot in ipairs(ranked) do
-        rows[place] = {name = self:Label(slot), score = slot.score, playerId = slot.bot and -1 or slot.hero:GetPlayerOwnerID()}
+        rows[place] = {name = self:Label(slot), score = slot.score, farm = slot.farm, playerId = slot.bot and -1 or slot.hero:GetPlayerOwnerID()}
     end
     CustomNetTables:SetTableValue("farm_race", "standings", {rows = rows, finished = self.finished and 1 or 0})
     self.standingsChanged = false
@@ -467,7 +595,7 @@ function Race:Finish(now)
     self:Report(now)
     local ranked = self:Standings()
     local winner = ranked[1]
-    local result = string.format("Победитель: %s — %d крипов", self:Label(winner), winner.score)
+    local result = string.format("Победитель: %s — %d очк.", self:Label(winner), winner.score)
     Tell(result)
     Announce(result, 5)
     self:PublishStandings(ranked)
@@ -496,6 +624,7 @@ function Race:Think()
         LaneWaves.Spawn(self.laneRoutes, self.creeps, self.laneWaves)
         self.nextLaneWaveAt = self.nextLaneWaveAt + config.laneWaveInterval
     end
+    self:UpdateGoldCamps(now)
     if self.standingsChanged then self:PublishStandings(self:Standings()) end
     if self.releaseCameraAt and now >= self.releaseCameraAt then
         for _, slot in ipairs(self.slots) do
@@ -512,7 +641,7 @@ function Race:Think()
         Announce("До финиша 10 секунд", 3)
     end
     for index, camp in ipairs(self.camps) do
-        if camp.alive == 0 and now >= camp.nextSpawn then self:SpawnCamp(camp, index) end
+        if camp.alive == 0 and now >= camp.nextSpawn then self:SpawnCamp(camp, packs[(index - 1) % #packs + 1]) end
     end
     for _, slot in ipairs(self.slots) do
         if slot.respawnAt and now >= slot.respawnAt then

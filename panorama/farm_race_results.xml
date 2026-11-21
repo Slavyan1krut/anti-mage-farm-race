@@ -9,13 +9,13 @@
         <Panel id="LiveLeaderboard" visible="false" hittest="false">
             <Panel id="LiveColumns">
                 <Label class="Player" text="#farm_race_live" />
-                <Label class="LiveScore" text="#farm_race_creeps" />
+                <Label class="LiveScore" text="#farm_race_points" />
             </Panel>
             <Panel id="LiveRows" />
         </Panel>
         <Panel id="FarmResults" visible="false" hittest="false">
             <Panel id="ResultsCard" hittest="false">
-                <Label id="ResultsTitle" text="#farm_race_results" />
+                <Label id="ResultsTitle" />
                 <Panel id="WinnerCard">
                     <DOTAHeroImage id="WinnerPortrait" heroname="npc_dota_hero_antimage" heroimagestyle="portrait" />
                     <Panel id="WinnerDetails">
@@ -24,13 +24,16 @@
                     </Panel>
                     <Panel id="WinnerTotal">
                         <Label id="WinnerScore" />
-                        <Label id="WinnerUnit" text="#farm_race_creeps" />
+                        <Label id="WinnerUnit" text="#farm_race_points" />
                     </Panel>
                 </Panel>
                 <Panel id="ResultsColumns">
                     <Label class="Place" text="#farm_race_place" />
                     <Label class="Player" text="#farm_race_player" />
-                    <Label class="Score" text="#farm_race_creeps" />
+                    <Label class="FarmPoints" text="#farm_race_lane" />
+                    <Label class="FarmPoints" text="#farm_race_forest" />
+                    <Label class="FarmPoints" text="#farm_race_gold" />
+                    <Label class="Score" text="#farm_race_total" />
                 </Panel>
                 <Panel id="ResultsRows" />
             </Panel>

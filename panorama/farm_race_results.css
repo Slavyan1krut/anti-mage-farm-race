@@ -31,7 +31,7 @@
 .LiveScore { width: 52px; text-align: right; vertical-align: center; }
 
 #ResultsCard {
-    width: 620px;
+    width: 730px;
     horizontal-align: center;
     vertical-align: center;
     flow-children: down;
@@ -42,6 +42,8 @@
     box-shadow: #08050f 0px 10px 35px 2px;
 }
 #ResultsTitle {
+    max-width: 100%;
+    text-overflow: ellipsis;
     color: #f3eafa;
     font-size: 35px;
     font-weight: bold;
@@ -80,7 +82,9 @@
 .ResultRow.WinningRow { background-color: #eab96d19; }
 .ResultRow Label { font-size: 21px; color: #ede5f4; }
 .ResultRow.WinningRow Label { color: #f4cb7a; }
-.Place, .Player, .Score { vertical-align: center; }
+.Place, .Player, .Score, .FarmPoints { vertical-align: center; }
 .Place { width: 72px; }
 .Player { width: fill-parent-flow(1); text-overflow: ellipsis; }
 .Score { width: 90px; text-align: right; }
+.FarmPoints { width: 78px; text-align: right; }
+.ResultRow .Score { font-weight: bold; }
