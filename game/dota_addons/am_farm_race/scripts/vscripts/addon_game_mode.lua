@@ -1,11 +1,13 @@
 local config = require("race_config")
+local LaneWaves = require("lane_waves")
 local heroName = "npc_dota_hero_antimage"
 local startingItems = {"item_bfury", "item_power_treads"}
 local raceAbilities = {"antimage_mana_break", "antimage_blink"}
 local disabledAbilities = {"antimage_counterspell_ally", "antimage_counterspell", "antimage_mana_overload", "antimage_mana_void", "antimage_persecutor"}
+-- Radiant and Dire are reserved for the map so every racer can attack both waves.
 local teams = {
-    DOTA_TEAM_GOODGUYS, DOTA_TEAM_BADGUYS, DOTA_TEAM_CUSTOM_1,
-    DOTA_TEAM_CUSTOM_2, DOTA_TEAM_CUSTOM_3,
+    DOTA_TEAM_CUSTOM_1, DOTA_TEAM_CUSTOM_2, DOTA_TEAM_CUSTOM_3,
+    DOTA_TEAM_CUSTOM_4, DOTA_TEAM_CUSTOM_5,
 }
 local colors = {
     {85, 210, 160}, {240, 110, 105}, {100, 165, 255}, {240, 195, 80}, {200, 135, 240},
@@ -26,6 +28,7 @@ local Race = {}
 function Precache(context)
     PrecacheUnitByNameSync(heroName, context)
     for _, item in ipairs(startingItems) do PrecacheItemByNameSync(item, context) end
+    LaneWaves.Precache(context)
     local cached = {}
     for _, pack in ipairs(packs) do
         for _, name in ipairs(pack) do
@@ -47,12 +50,15 @@ function Race:Init()
     self.heroSlots = {}
     self.creeps = {}
     self.camps = {}
+    self.laneWaves = {}
     for index, team in ipairs(teams) do
         self.slots[index] = {index = index, team = team, score = 0, reached = 0}
         GameRules:SetCustomGameTeamMaxPlayers(team, 1)
         SetTeamCustomHealthbarColor(team, unpack(colors[index]))
     end
-    for team = DOTA_TEAM_CUSTOM_4, DOTA_TEAM_CUSTOM_8 do
+    GameRules:SetCustomGameTeamMaxPlayers(DOTA_TEAM_GOODGUYS, 0)
+    GameRules:SetCustomGameTeamMaxPlayers(DOTA_TEAM_BADGUYS, 0)
+    for team = DOTA_TEAM_CUSTOM_6, DOTA_TEAM_CUSTOM_8 do
         GameRules:SetCustomGameTeamMaxPlayers(team, 0)
     end
 
@@ -165,6 +171,7 @@ function Race:OnStateChange()
         self:AssignParticipants()
     elseif state == DOTA_GAMERULES_STATE_PRE_GAME then
         self:FindCamps()
+        self.laneRoutes = LaneWaves.GetRoutes()
     elseif state == DOTA_GAMERULES_STATE_GAME_IN_PROGRESS then
         self:Start()
     end
@@ -230,12 +237,14 @@ function Race:Start()
     for index, camp in ipairs(self.camps) do self:SpawnCamp(camp, index) end
     local now = GameRules:GetGameTime()
     self.endsAt = now + config.duration
+    self.nextLaneWaveAt = now + config.laneWaveInterval
+    LaneWaves.Spawn(self.laneRoutes, self.creeps, self.laneWaves)
     self.nextUpdate = now + config.scoreboardInterval
     self.releaseCameraAt = now + 0.6
     self:PublishStandings(self:Standings())
     local duration = string.format("%d:%02d", math.floor(config.duration / 60), config.duration % 60)
     Announce("Гонка началась! " .. duration, 3)
-    Tell("Фармите нейтральных крипов. Каждый добитый крип — 1 очко. Счёт и таймер: -score")
+    Tell("Фармите крипов в лесу и на линиях. Каждый добитый крип — 1 очко. Счёт и таймер: -score")
 end
 
 function Race:PrepareHero(slot)
@@ -280,7 +289,12 @@ function Race:DamageAllowed(event)
     local attacker = event.entindex_attacker_const and EntIndexToHScript(event.entindex_attacker_const)
     local victim = event.entindex_victim_const and EntIndexToHScript(event.entindex_victim_const)
     if not attacker or not victim then return true end
-    if attacker:IsBuilding() or victim:IsBuilding() then return false end
+    if victim:IsBuilding() then return false end
+    if attacker:IsBuilding() then
+        local wave = self.creeps[victim:entindex()]
+        return attacker:IsTower() and self.endsAt ~= nil and not self.finished
+            and wave ~= nil and wave.point == nil and attacker:GetTeamNumber() ~= victim:GetTeamNumber()
+    end
     local racer = self.heroSlots[attacker:entindex()]
     if racer then return self.endsAt ~= nil and not self.finished and self.creeps[victim:entindex()] ~= nil end
     if self.heroSlots[victim:entindex()] then
@@ -291,12 +305,12 @@ end
 
 function Race:OnKilled(event)
     local now = GameRules:GetGameTime()
-    local camp = self.creeps[event.entindex_killed]
-    if camp then
+    local group = self.creeps[event.entindex_killed]
+    if group then
         self.creeps[event.entindex_killed] = nil
-        camp.units[event.entindex_killed] = nil
-        camp.alive = camp.alive - 1
-        if camp.alive == 0 then camp.nextSpawn = now + config.campRespawn end
+        group.units[event.entindex_killed] = nil
+        group.alive = group.alive - 1
+        if group.alive == 0 and group.point then group.nextSpawn = now + config.campRespawn end
         local slot = self.heroSlots[event.entindex_attacker]
         if slot and self.endsAt and now < self.endsAt and not self.finished then
             slot.score = slot.score + 1
@@ -308,6 +322,13 @@ function Race:OnKilled(event)
     if slot and not self.finished then
         slot.respawnAt = now + config.heroRespawn
         slot.hero:SetTimeUntilRespawn(9999)
+    end
+end
+
+local function FarmPosition(group)
+    if group.point then return group.point end
+    for _, creep in pairs(group.units) do
+        if not creep:IsNull() and creep:IsAlive() then return creep:GetAbsOrigin() end
     end
 end
 
@@ -327,13 +348,18 @@ function Race:DriveBot(slot, now)
     if not camp or camp.alive == 0 then
         local bestDistance = math.huge
         camp = nil
-        for _, candidate in ipairs(self.camps) do
-            if candidate.alive > 0 and (candidate ~= slot.skippedCamp or now >= slot.skipUntil) then
-                local distance = GridNav:FindPathLength(origin, candidate.point)
-                if distance <= 0 then distance = 15000 + FlatDistance(origin, candidate.point) end
-                if distance >= 0 and distance < bestDistance then
-                    bestDistance = distance
-                    camp = candidate
+        for _, groups in ipairs({self.camps, self.laneWaves}) do
+            for _, candidate in ipairs(groups) do
+                if candidate.alive > 0 and (candidate ~= slot.skippedCamp or now >= slot.skipUntil) then
+                    local point = FarmPosition(candidate)
+                    if point then
+                        local distance = GridNav:FindPathLength(origin, point)
+                        if distance <= 0 then distance = 15000 + FlatDistance(origin, point) end
+                        if distance < bestDistance then
+                            bestDistance = distance
+                            camp = candidate
+                        end
+                    end
                 end
             end
         end
@@ -366,16 +392,18 @@ function Race:DriveBot(slot, now)
     if slot.orderedCamp == camp and slot.orderedTarget == target and now < slot.repeatOrderAt then return end
     slot.orderedCamp = camp
     slot.orderedTarget = target
-    slot.repeatOrderAt = now + 4
+    slot.repeatOrderAt = now + (camp.point and 4 or 1.5)
     if target then
         ExecuteOrderFromTable({
             UnitIndex = hero:entindex(), OrderType = DOTA_UNIT_ORDER_ATTACK_TARGET,
             TargetIndex = target:entindex(), Queue = false,
         })
     else
+        local point = FarmPosition(camp)
+        if not point then return end
         ExecuteOrderFromTable({
             UnitIndex = hero:entindex(), OrderType = DOTA_UNIT_ORDER_MOVE_TO_POSITION,
-            Position = camp.point, Queue = false,
+            Position = point, Queue = false,
         })
     end
 end
@@ -463,6 +491,10 @@ function Race:Think()
     if now >= self.endsAt then
         self:Finish(now)
         return nil
+    end
+    if now >= self.nextLaneWaveAt then
+        LaneWaves.Spawn(self.laneRoutes, self.creeps, self.laneWaves)
+        self.nextLaneWaveAt = self.nextLaneWaveAt + config.laneWaveInterval
     end
     if self.standingsChanged then self:PublishStandings(self:Standings()) end
     if self.releaseCameraAt and now >= self.releaseCameraAt then
